@@ -13,7 +13,7 @@ export function GalleryPage() {
   return (
     <div className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)' }}>
       {/* Interactive Animated Background */}
-      <InteractiveBackground />
+      <InteractiveBackground variant="animated" />
 
       {/* Dotted Pattern Overlay */}
       <div 

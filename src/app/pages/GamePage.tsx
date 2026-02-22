@@ -50,17 +50,17 @@ function getWindowedCards(
 function QuestionCard({ question, color }: { question: Question; color: string }) {
   return (
     <article
-      className="relative p-10 md:p-14 rounded-3xl border-[8px] min-h-[420px] w-full flex items-center justify-center"
+      className="relative p-6 sm:p-8 md:p-14 rounded-2xl md:rounded-3xl border-[6px] md:border-[8px] min-h-[280px] sm:min-h-[340px] md:min-h-[420px] w-full flex items-center justify-center"
       style={{
         backgroundColor: color,
         borderColor: "#000",
         boxShadow: "14px 14px 0px #000, 0 0 60px rgba(0,0,0,0.35)",
       }}
     >
-      <div className="absolute top-4 left-4 w-12 h-12 border-t-[6px] border-l-[6px] border-black" />
-      <div className="absolute top-4 right-4 w-12 h-12 border-t-[6px] border-r-[6px] border-black" />
-      <div className="absolute bottom-4 left-4 w-12 h-12 border-b-[6px] border-l-[6px] border-black" />
-      <div className="absolute bottom-4 right-4 w-12 h-12 border-b-[6px] border-r-[6px] border-black" />
+      <div className="absolute top-3 md:top-4 left-3 md:left-4 w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 border-t-[4px] sm:border-t-[5px] md:border-t-[6px] border-l-[4px] sm:border-l-[5px] md:border-l-[6px] border-black" />
+      <div className="absolute top-3 md:top-4 right-3 md:right-4 w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 border-t-[4px] sm:border-t-[5px] md:border-t-[6px] border-r-[4px] sm:border-r-[5px] md:border-r-[6px] border-black" />
+      <div className="absolute bottom-3 md:bottom-4 left-3 md:left-4 w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 border-b-[4px] sm:border-b-[5px] md:border-b-[6px] border-l-[4px] sm:border-l-[5px] md:border-l-[6px] border-black" />
+      <div className="absolute bottom-3 md:bottom-4 right-3 md:right-4 w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 border-b-[4px] sm:border-b-[5px] md:border-b-[6px] border-r-[4px] sm:border-r-[5px] md:border-r-[6px] border-black" />
 
       <div
         className="absolute inset-0 opacity-5 rounded-3xl"
@@ -72,16 +72,16 @@ function QuestionCard({ question, color }: { question: Question; color: string }
       />
 
       <div className="relative z-10 text-center">
-        <div className="mb-8">
+        <div className="mb-5 sm:mb-6 md:mb-8">
           <div
-            className="inline-block px-6 py-2 bg-black text-white font-bold text-lg"
+            className="inline-block px-4 sm:px-5 md:px-6 py-1.5 md:py-2 bg-black text-white font-bold text-sm sm:text-base md:text-lg"
             style={{ fontFamily: "Courier New, monospace" }}
           >
             ❝ QUESTION ❞
           </div>
         </div>
         <p
-          className="text-3xl md:text-5xl font-bold leading-tight"
+          className="text-2xl sm:text-3xl md:text-5xl font-bold leading-tight"
           style={{
             fontFamily: "Courier New, monospace",
             color: "#000",
@@ -98,6 +98,9 @@ function QuestionCard({ question, color }: { question: Question; color: string }
 export function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
   const game = gameId ? getGameById(gameId) : undefined;
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false,
+  );
 
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [deckQuestions, setDeckQuestions] = useState<Question[]>([]);
@@ -221,6 +224,21 @@ export function GamePage() {
     return () => window.clearTimeout(timeoutId);
   }, [statusMessage]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const media = window.matchMedia("(max-width: 768px)");
+    const onChange = (): void => {
+      setIsMobile(media.matches);
+    };
+
+    onChange();
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+
   const advanceDeck = useCallback(() => {
     if (!gameId || !allQuestions.length || deckQuestions.length === 0) {
       return;
@@ -287,7 +305,7 @@ export function GamePage() {
       className="min-h-screen p-4 md:p-8 flex flex-col relative overflow-hidden"
       style={{ background: "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)" }}
     >
-      <InteractiveBackground />
+      <InteractiveBackground variant="static" />
 
       <div
         className="absolute inset-0 opacity-10 pointer-events-none"
@@ -386,7 +404,7 @@ export function GamePage() {
                   boxShadow: "6px 6px 0px #000",
                 }}
               >
-                <p className="font-bold text-2xl">
+                <p className="font-bold text-lg sm:text-xl md:text-2xl">
                   Card {Math.min(activeIndex + 1, deckQuestions.length)} / {deckQuestions.length}
                 </p>
               </div>
@@ -395,15 +413,15 @@ export function GamePage() {
             {visibleQuestions.length > 1 ? (
               <DraggableCardStack
                 key={`${game.id}-${stackVersion}`}
-                stackOffsetX={130}
-                stackOffsetY={120}
-                visibleCount={4}
+                stackOffsetX={isMobile ? 78 : 130}
+                stackOffsetY={isMobile ? 72 : 120}
+                visibleCount={isMobile ? 3 : 4}
                 duration={0.75}
                 dragThreshold={20}
                 appearEffect
                 appearDuration={0.6}
                 showControls
-                controlSize={54}
+                controlSize={isMobile ? 44 : 54}
                 controlBgColor="#000000"
                 controlColor="#ffffff"
                 forwardOnly
