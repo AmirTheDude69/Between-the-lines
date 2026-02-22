@@ -18,6 +18,8 @@ interface PlayableDeck {
   didAutoReset: boolean;
 }
 
+const STACK_WINDOW_SIZE = 10;
+
 function buildPlayableDeck(gameId: string, questions: Question[]): PlayableDeck {
   const unseen = getUnseenQuestions(gameId, questions);
   if (unseen.length === 0 && questions.length > 0) {
@@ -32,6 +34,65 @@ function buildPlayableDeck(gameId: string, questions: Question[]): PlayableDeck 
     deck: shuffleQuestions(unseen),
     didAutoReset: false,
   };
+}
+
+function getWindowedCards(
+  deckQuestions: Question[],
+  activeIndex: number,
+  size: number,
+): Question[] {
+  if (deckQuestions.length === 0) {
+    return [];
+  }
+  return deckQuestions.slice(activeIndex, Math.min(deckQuestions.length, activeIndex + size));
+}
+
+function QuestionCard({ question, color }: { question: Question; color: string }) {
+  return (
+    <article
+      className="relative p-10 md:p-14 rounded-3xl border-[8px] min-h-[420px] w-full flex items-center justify-center"
+      style={{
+        backgroundColor: color,
+        borderColor: "#000",
+        boxShadow: "14px 14px 0px #000, 0 0 60px rgba(0,0,0,0.35)",
+      }}
+    >
+      <div className="absolute top-4 left-4 w-12 h-12 border-t-[6px] border-l-[6px] border-black" />
+      <div className="absolute top-4 right-4 w-12 h-12 border-t-[6px] border-r-[6px] border-black" />
+      <div className="absolute bottom-4 left-4 w-12 h-12 border-b-[6px] border-l-[6px] border-black" />
+      <div className="absolute bottom-4 right-4 w-12 h-12 border-b-[6px] border-r-[6px] border-black" />
+
+      <div
+        className="absolute inset-0 opacity-5 rounded-3xl"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(45deg, #000 0, #000 2px, transparent 0, transparent 50%)",
+          backgroundSize: "20px 20px",
+        }}
+      />
+
+      <div className="relative z-10 text-center">
+        <div className="mb-8">
+          <div
+            className="inline-block px-6 py-2 bg-black text-white font-bold text-lg"
+            style={{ fontFamily: "Courier New, monospace" }}
+          >
+            ❝ QUESTION ❞
+          </div>
+        </div>
+        <p
+          className="text-3xl md:text-5xl font-bold leading-tight"
+          style={{
+            fontFamily: "Courier New, monospace",
+            color: "#000",
+            textShadow: "3px 3px 0px rgba(255,255,255,0.4)",
+          }}
+        >
+          {question.text}
+        </p>
+      </div>
+    </article>
+  );
 }
 
 export function GamePage() {
@@ -82,6 +143,8 @@ export function GamePage() {
 
       if (deck[0]) {
         markSeen(deck[0], sourceQuestions);
+      } else {
+        updateSeenCount(sourceQuestions);
       }
 
       if (didAutoReset) {
@@ -92,7 +155,7 @@ export function GamePage() {
         setStatusMessage(null);
       }
     },
-    [gameId, markSeen],
+    [gameId, markSeen, updateSeenCount],
   );
 
   useEffect(() => {
@@ -158,24 +221,38 @@ export function GamePage() {
     return () => window.clearTimeout(timeoutId);
   }, [statusMessage]);
 
+  const advanceDeck = useCallback(() => {
+    if (!gameId || !allQuestions.length || deckQuestions.length === 0) {
+      return;
+    }
+
+    const nextIndex = activeIndex + 1;
+    if (nextIndex >= deckQuestions.length) {
+      rebuildDeck("wrap", allQuestions);
+      return;
+    }
+
+    setActiveIndex(nextIndex);
+    setStackVersion((value) => value + 1);
+    const question = deckQuestions[nextIndex];
+    if (question) {
+      markSeen(question, allQuestions);
+    }
+  }, [gameId, allQuestions, deckQuestions, activeIndex, rebuildDeck, markSeen]);
+
   const handleStackChange = useCallback(
-    (index: number, payload: { wrapped: boolean; direction: "next" | "prev" }) => {
-      if (!gameId || !allQuestions.length || payload.direction !== "next") {
+    (_index: number, payload: { direction: "next" | "prev" }) => {
+      if (payload.direction !== "next") {
         return;
       }
-
-      if (payload.wrapped) {
-        rebuildDeck("wrap", allQuestions);
-        return;
-      }
-
-      setActiveIndex(index);
-      const question = deckQuestions[index];
-      if (question) {
-        markSeen(question, allQuestions);
-      }
+      advanceDeck();
     },
-    [gameId, allQuestions, deckQuestions, rebuildDeck, markSeen],
+    [advanceDeck],
+  );
+
+  const visibleQuestions = useMemo(
+    () => getWindowedCards(deckQuestions, activeIndex, STACK_WINDOW_SIZE),
+    [deckQuestions, activeIndex],
   );
 
   const unseenCount = useMemo(() => {
@@ -315,69 +392,30 @@ export function GamePage() {
               </div>
             </div>
 
-            <DraggableCardStack
-              key={`${game.id}-${stackVersion}`}
-              stackOffsetX={130}
-              stackOffsetY={120}
-              visibleCount={4}
-              duration={0.75}
-              dragThreshold={20}
-              appearEffect
-              appearDuration={0.6}
-              showControls
-              controlSize={54}
-              controlBgColor="#000000"
-              controlColor="#ffffff"
-              forwardOnly
-              onIndexChange={handleStackChange}
-            >
-              {deckQuestions.map((question) => (
-                <article
-                  key={question.id}
-                  className="relative p-10 md:p-14 rounded-3xl border-[8px] min-h-[420px] w-full flex items-center justify-center"
-                  style={{
-                    backgroundColor: game.color,
-                    borderColor: "#000",
-                    boxShadow: "14px 14px 0px #000, 0 0 60px rgba(0,0,0,0.35)",
-                  }}
-                >
-                  <div className="absolute top-4 left-4 w-12 h-12 border-t-[6px] border-l-[6px] border-black" />
-                  <div className="absolute top-4 right-4 w-12 h-12 border-t-[6px] border-r-[6px] border-black" />
-                  <div className="absolute bottom-4 left-4 w-12 h-12 border-b-[6px] border-l-[6px] border-black" />
-                  <div className="absolute bottom-4 right-4 w-12 h-12 border-b-[6px] border-r-[6px] border-black" />
-
-                  <div
-                    className="absolute inset-0 opacity-5 rounded-3xl"
-                    style={{
-                      backgroundImage:
-                        "repeating-linear-gradient(45deg, #000 0, #000 2px, transparent 0, transparent 50%)",
-                      backgroundSize: "20px 20px",
-                    }}
-                  />
-
-                  <div className="relative z-10 text-center">
-                    <div className="mb-8">
-                      <div
-                        className="inline-block px-6 py-2 bg-black text-white font-bold text-lg"
-                        style={{ fontFamily: "Courier New, monospace" }}
-                      >
-                        ❝ QUESTION ❞
-                      </div>
-                    </div>
-                    <p
-                      className="text-3xl md:text-5xl font-bold leading-tight"
-                      style={{
-                        fontFamily: "Courier New, monospace",
-                        color: "#000",
-                        textShadow: "3px 3px 0px rgba(255,255,255,0.4)",
-                      }}
-                    >
-                      {question.text}
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </DraggableCardStack>
+            {visibleQuestions.length > 1 ? (
+              <DraggableCardStack
+                key={`${game.id}-${stackVersion}`}
+                stackOffsetX={130}
+                stackOffsetY={120}
+                visibleCount={4}
+                duration={0.75}
+                dragThreshold={20}
+                appearEffect
+                appearDuration={0.6}
+                showControls
+                controlSize={54}
+                controlBgColor="#000000"
+                controlColor="#ffffff"
+                forwardOnly
+                onIndexChange={handleStackChange}
+              >
+                {visibleQuestions.map((question) => (
+                  <QuestionCard key={question.id} question={question} color={game.color} />
+                ))}
+              </DraggableCardStack>
+            ) : (
+              visibleQuestions[0] && <QuestionCard question={visibleQuestions[0]} color={game.color} />
+            )}
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from "react";
 
 interface LegoBrick {
   x: number;
@@ -11,255 +11,259 @@ interface LegoBrick {
   rotation: number;
   rotationSpeed: number;
   isActive: boolean;
-  mass: number;
-  originalY: number;
+}
+
+const COLORS = [
+  "#FF6B6B",
+  "#FFD93D",
+  "#6BCF7F",
+  "#4ECDC4",
+  "#C77DFF",
+  "#FF8C42",
+  "#6A4C93",
+];
+
+const BRICK_TYPES = [
+  { width: 40, height: 24 },
+  { width: 60, height: 24 },
+  { width: 80, height: 24 },
+  { width: 40, height: 40 },
+];
+
+function adjustColor(color: string, amount: number): string {
+  const hex = color.replace("#", "");
+  const red = Math.max(0, Math.min(255, parseInt(hex.slice(0, 2), 16) + amount));
+  const green = Math.max(0, Math.min(255, parseInt(hex.slice(2, 4), 16) + amount));
+  const blue = Math.max(0, Math.min(255, parseInt(hex.slice(4, 6), 16) + amount));
+  return `#${red.toString(16).padStart(2, "0")}${green
+    .toString(16)
+    .padStart(2, "0")}${blue.toString(16).padStart(2, "0")}`;
+}
+
+function getPerfMode(): { lowPower: boolean; maxDpr: number; brickCount: number } {
+  const isSmallScreen =
+    typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches;
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const isTouch =
+    typeof navigator !== "undefined" &&
+    ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+  const deviceMemory =
+    typeof navigator !== "undefined" &&
+    "deviceMemory" in navigator &&
+    typeof (navigator as Navigator & { deviceMemory?: number }).deviceMemory ===
+      "number"
+      ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4
+      : 4;
+
+  const lowPower = isSmallScreen || prefersReducedMotion || isTouch || deviceMemory <= 4;
+  return {
+    lowPower,
+    maxDpr: lowPower ? 1.1 : 1.8,
+    brickCount: lowPower ? 180 : 700,
+  };
 }
 
 export function InteractiveBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mouseRef = useRef({ x: 0, y: 0 });
   const bricksRef = useRef<LegoBrick[]>([]);
+  const mouseRef = useRef({ x: -9999, y: -9999 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
 
-    // Helper function to adjust color brightness
-    const adjustColor = (color: string, amount: number): string => {
-      const hex = color.replace('#', '');
-      const r = Math.max(0, Math.min(255, parseInt(hex.substr(0, 2), 16) + amount));
-      const g = Math.max(0, Math.min(255, parseInt(hex.substr(2, 2), 16) + amount));
-      const b = Math.max(0, Math.min(255, parseInt(hex.substr(4, 2), 16) + amount));
-      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-    };
+    const perf = getPerfMode();
 
-    // Initialize LEGO bricks
-    const initBricks = () => {
-      const colors = ['#FF6B6B', '#FFD93D', '#6BCF7F', '#4ECDC4', '#C77DFF', '#FF8C42', '#6A4C93'];
-      const brickTypes = [
-        { width: 40, height: 24 }, // 2x1
-        { width: 60, height: 24 }, // 3x1
-        { width: 80, height: 24 }, // 4x1
-        { width: 40, height: 40 }, // 2x2
-      ];
-
-      bricksRef.current = Array.from({ length: 2000 }, () => {
-        const type = brickTypes[Math.floor(Math.random() * brickTypes.length)];
+    const initBricks = (): void => {
+      bricksRef.current = Array.from({ length: perf.brickCount }, () => {
+        const type = BRICK_TYPES[Math.floor(Math.random() * BRICK_TYPES.length)];
         return {
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
           width: type.width,
           height: type.height,
-          color: colors[Math.floor(Math.random() * colors.length)],
+          color: COLORS[Math.floor(Math.random() * COLORS.length)],
           vx: 0,
           vy: 0,
           rotation: Math.random() * Math.PI * 2,
           rotationSpeed: 0,
           isActive: false,
-          mass: (type.width * type.height) / 1000,
-          originalY: 0
         };
       });
-
-      // Set original Y positions
-      bricksRef.current.forEach(brick => {
-        brick.originalY = brick.y;
-      });
     };
 
-    // Set canvas size
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      // Reinitialize bricks on resize
+    const resizeCanvas = (): void => {
+      const dpr = Math.min(window.devicePixelRatio || 1, perf.maxDpr);
+      const cssWidth = window.innerWidth;
+      const cssHeight = window.innerHeight;
+      canvas.width = Math.floor(cssWidth * dpr);
+      canvas.height = Math.floor(cssHeight * dpr);
+      canvas.style.width = `${cssWidth}px`;
+      canvas.style.height = `${cssHeight}px`;
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
       initBricks();
+      drawFrame();
     };
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
 
-    // Mouse move handler
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
-    };
-    window.addEventListener('mousemove', handleMouseMove);
+    const drawBrick = (brick: LegoBrick): void => {
+      context.save();
+      context.translate(brick.x, brick.y);
+      context.rotate(brick.rotation);
 
-    // Draw LEGO brick
-    const drawLegoBrick = (brick: LegoBrick) => {
-      ctx.save();
-      ctx.translate(brick.x, brick.y);
-      ctx.rotate(brick.rotation);
-
-      // Main brick body with gradient
-      const gradient = ctx.createLinearGradient(-brick.width / 2, -brick.height / 2, brick.width / 2, brick.height / 2);
+      const gradient = context.createLinearGradient(
+        -brick.width / 2,
+        -brick.height / 2,
+        brick.width / 2,
+        brick.height / 2,
+      );
       gradient.addColorStop(0, brick.color);
-      gradient.addColorStop(1, adjustColor(brick.color, -30));
-      
-      ctx.fillStyle = gradient;
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      
-      // Draw brick body
-      ctx.fillRect(-brick.width / 2, -brick.height / 2, brick.width, brick.height);
-      ctx.strokeRect(-brick.width / 2, -brick.height / 2, brick.width, brick.height);
+      gradient.addColorStop(1, adjustColor(brick.color, -25));
 
-      // Draw studs (the bumps on top)
-      const studRadius = 4;
-      const studCount = Math.floor(brick.width / 20);
-      const studSpacing = brick.width / (studCount + 1);
+      context.fillStyle = gradient;
+      context.strokeStyle = "#000";
+      context.lineWidth = perf.lowPower ? 1.5 : 2;
+      context.fillRect(-brick.width / 2, -brick.height / 2, brick.width, brick.height);
+      context.strokeRect(-brick.width / 2, -brick.height / 2, brick.width, brick.height);
 
-      ctx.fillStyle = adjustColor(brick.color, 20);
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 1.5;
+      if (!perf.lowPower) {
+        const studRadius = 3.5;
+        const studCount = Math.floor(brick.width / 20);
+        const studSpacing = brick.width / (studCount + 1);
+        context.fillStyle = adjustColor(brick.color, 20);
+        context.strokeStyle = "#000";
+        context.lineWidth = 1.3;
 
-      for (let i = 0; i < studCount; i++) {
-        const studX = -brick.width / 2 + studSpacing * (i + 1);
-        const studY = -brick.height / 2 - 3;
-        
-        ctx.beginPath();
-        ctx.arc(studX, studY, studRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        for (let index = 0; index < studCount; index += 1) {
+          const studX = -brick.width / 2 + studSpacing * (index + 1);
+          const studY = -brick.height / 2 - 3;
+          context.beginPath();
+          context.arc(studX, studY, studRadius, 0, Math.PI * 2);
+          context.fill();
+          context.stroke();
+        }
       }
 
-      // Add shine effect
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.fillRect(-brick.width / 2 + 2, -brick.height / 2 + 2, brick.width / 3, brick.height / 4);
-
-      ctx.restore();
+      context.restore();
     };
 
-    // Physics constants
-    const GRAVITY = 0.5;
-    const FRICTION = 0.99;
-    const BOUNCE = 0.4;
-    const ACTIVATION_RADIUS = 120;
-
-    // Animation loop
-    let animationId: number;
-    let hue = 0;
-
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw subtle grid pattern
-      ctx.strokeStyle = `rgba(255, 255, 255, 0.02)`;
-      ctx.lineWidth = 1;
-      const gridSize = 50;
-      for (let x = 0; x < canvas.width; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
+    const drawFrame = (): void => {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      for (const brick of bricksRef.current) {
+        drawBrick(brick);
       }
-      for (let y = 0; y < canvas.height; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
+    };
+
+    const GRAVITY = 0.42;
+    const FRICTION = 0.985;
+    const BOUNCE = 0.42;
+    const ACTIVATION_RADIUS = 115;
+    let animationId = 0;
+    let running = !document.hidden;
+
+    const animate = (): void => {
+      if (!running) {
+        return;
       }
 
-      // Update and draw LEGO bricks
-      bricksRef.current.forEach((brick) => {
-        // Check distance from mouse
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (const brick of bricksRef.current) {
         const dx = brick.x - mouseRef.current.x;
         const dy = brick.y - mouseRef.current.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Check if brick is near the bottom (settled)
-        const isNearBottom = brick.y > canvas.height - brick.height / 2 - 50;
-
-        // Activate brick if mouse is near
         if (distance < ACTIVATION_RADIUS) {
           if (!brick.isActive) {
             brick.isActive = true;
-            // Apply initial impulse away from mouse
             const angle = Math.atan2(dy, dx);
-            const force = (ACTIVATION_RADIUS - distance) / ACTIVATION_RADIUS * 8;
-            brick.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 2;
-            brick.vy = Math.sin(angle) * force - Math.random() * 3;
-            brick.rotationSpeed = (Math.random() - 0.5) * 0.3;
-          } else if (isNearBottom && Math.abs(brick.vx) < 2 && Math.abs(brick.vy) < 2) {
-            // If brick is settled at the bottom and mouse hovers over it, throw it up
-            const angle = Math.atan2(dy, dx);
-            const upwardForce = (ACTIVATION_RADIUS - distance) / ACTIVATION_RADIUS * 15;
-            brick.vx = Math.cos(angle) * upwardForce + (Math.random() - 0.5) * 4;
-            brick.vy = -Math.abs(upwardForce) - Math.random() * 5; // Strong upward force
-            brick.rotationSpeed = (Math.random() - 0.5) * 0.4;
+            const force = ((ACTIVATION_RADIUS - distance) / ACTIVATION_RADIUS) * 7;
+            brick.vx = Math.cos(angle) * force + (Math.random() - 0.5) * 1.5;
+            brick.vy = Math.sin(angle) * force - Math.random() * 2.5;
+            brick.rotationSpeed = (Math.random() - 0.5) * 0.24;
           }
         }
 
-        // Apply physics if brick is active
         if (brick.isActive) {
-          // Apply gravity
           brick.vy += GRAVITY;
-
-          // Apply friction
           brick.vx *= FRICTION;
           brick.vy *= FRICTION;
-
-          // Update position
           brick.x += brick.vx;
           brick.y += brick.vy;
-
-          // Update rotation
           brick.rotation += brick.rotationSpeed;
-          brick.rotationSpeed *= 0.99;
+          brick.rotationSpeed *= 0.985;
 
-          // Bounce off ground
-          if (brick.y > canvas.height - brick.height / 2) {
-            brick.y = canvas.height - brick.height / 2;
+          if (brick.y > height - brick.height / 2) {
+            brick.y = height - brick.height / 2;
             brick.vy *= -BOUNCE;
-            brick.rotationSpeed *= 0.8;
-            
-            // Stop if moving very slowly
-            if (Math.abs(brick.vy) < 0.5 && Math.abs(brick.vx) < 0.5) {
+            if (Math.abs(brick.vy) < 0.45 && Math.abs(brick.vx) < 0.45) {
               brick.vy = 0;
-              brick.vx *= 0.8;
+              brick.vx *= 0.7;
             }
           }
 
-          // Bounce off walls
           if (brick.x < brick.width / 2) {
             brick.x = brick.width / 2;
             brick.vx *= -BOUNCE;
-          }
-          if (brick.x > canvas.width - brick.width / 2) {
-            brick.x = canvas.width - brick.width / 2;
+          } else if (brick.x > width - brick.width / 2) {
+            brick.x = width - brick.width / 2;
             brick.vx *= -BOUNCE;
           }
 
-          // Bounce off ceiling
           if (brick.y < brick.height / 2) {
             brick.y = brick.height / 2;
             brick.vy *= -BOUNCE;
           }
-
-          // Add slight continuous mouse repulsion when active
-          if (distance < ACTIVATION_RADIUS * 1.5) {
-            const force = (ACTIVATION_RADIUS * 1.5 - distance) / (ACTIVATION_RADIUS * 1.5) * 0.5;
-            brick.vx += (dx / distance) * force;
-            brick.vy += (dy / distance) * force;
-          }
         }
 
-        // Draw brick
-        drawLegoBrick(brick);
-      });
+        drawBrick(brick);
+      }
 
-      hue = (hue + 0.8) % 360;
-
-      animationId = requestAnimationFrame(animate);
+      animationId = window.requestAnimationFrame(animate);
     };
 
-    animate();
+    const handlePointerMove = (event: PointerEvent): void => {
+      mouseRef.current = { x: event.clientX, y: event.clientY };
+    };
+
+    const handleVisibility = (): void => {
+      running = !document.hidden;
+      if (running && !perf.lowPower) {
+        animationId = window.requestAnimationFrame(animate);
+      } else {
+        window.cancelAnimationFrame(animationId);
+      }
+    };
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    if (perf.lowPower) {
+      // Mobile/low-power mode: static frame avoids tab crashes on iOS webviews.
+      return () => {
+        window.removeEventListener("resize", resizeCanvas);
+      };
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    document.addEventListener("visibilitychange", handleVisibility);
+    animationId = window.requestAnimationFrame(animate);
 
     return () => {
-      window.removeEventListener('resize', resizeCanvas);
-      window.removeEventListener('mousemove', handleMouseMove);
-      cancelAnimationFrame(animationId);
+      window.removeEventListener("resize", resizeCanvas);
+      window.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.cancelAnimationFrame(animationId);
     };
   }, []);
 
