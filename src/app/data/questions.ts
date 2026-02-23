@@ -1,4 +1,4 @@
-import { getGameById } from "./games";
+import type { Game } from "./games";
 
 export interface Question {
   id: string;
@@ -245,12 +245,8 @@ export function getUnseenQuestions(gameId: string, questions: Question[]): Quest
   return questions.filter((question) => !seen.has(question.id));
 }
 
-export async function fetchQuestionsByGameId(gameId: string): Promise<Question[]> {
-  const game = getGameById(gameId);
-  if (!game) {
-    throw new Error("Game not found.");
-  }
-
+export async function fetchQuestionsByGame(game: Pick<Game, "id" | "name" | "sheetGid">): Promise<Question[]> {
+  const gameId = game.id;
   const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${game.sheetGid}`;
 
   try {

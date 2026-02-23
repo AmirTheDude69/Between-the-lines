@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { games } from "../data/games";
+import { fetchGames, fallbackGames, type Game } from "../data/games";
 import { Info } from "lucide-react";
 import {
   Tooltip,
@@ -10,6 +11,24 @@ import {
 import { InteractiveBackground } from "../components/InteractiveBackground";
 
 export function GalleryPage() {
+  const [galleryGames, setGalleryGames] = useState<Game[]>(fallbackGames);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const dynamicGames = await fetchGames();
+      if (cancelled || dynamicGames.length === 0) {
+        return;
+      }
+      setGalleryGames(dynamicGames);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)' }}>
       {/* Interactive Animated Background */}
@@ -46,7 +65,7 @@ export function GalleryPage() {
         <div className="mt-8 flex items-center justify-center gap-4 flex-wrap">
           <div className="px-6 py-2 border-4 border-black bg-white transform -rotate-2">
             <p className="font-bold text-lg" style={{ fontFamily: 'Courier New, monospace' }}>
-              {games.length} GAMES
+              {galleryGames.length} GAMES
             </p>
           </div>
           <div className="px-6 py-2 border-4 border-black bg-white transform rotate-2">
@@ -75,7 +94,7 @@ export function GalleryPage() {
 
       {/* Game Cards Grid */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 mb-16 relative" style={{ zIndex: 10 }}>
-        {games.map((game, index) => (
+        {galleryGames.map((game, index) => (
           <Link
             key={game.id}
             to={`/game/${game.id}`}

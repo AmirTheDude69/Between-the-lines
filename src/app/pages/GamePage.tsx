@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, RotateCcw } from "lucide-react";
-import { getGameById } from "../data/games";
+import { fetchGames, type Game } from "../data/games";
 import {
-  fetchQuestionsByGameId,
+  fetchQuestionsByGame,
   getUnseenQuestions,
   markQuestionSeen,
   Question,
@@ -97,7 +97,7 @@ function QuestionCard({ question, color }: { question: Question; color: string }
 
 export function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
-  const game = gameId ? getGameById(gameId) : undefined;
+  const [game, setGame] = useState<Game | null>(null);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false,
   );
@@ -162,7 +162,11 @@ export function GamePage() {
   );
 
   useEffect(() => {
-    if (!gameId || !game) {
+    if (!gameId) {
+      setGame(null);
+      setAllQuestions([]);
+      setDeckQuestions([]);
+      setSeenCount(0);
       setError("Game not found.");
       setIsLoading(false);
       return;
@@ -172,10 +176,26 @@ export function GamePage() {
     setIsLoading(true);
     setError(null);
     setStatusMessage(null);
+    setGame(null);
+    setAllQuestions([]);
+    setDeckQuestions([]);
+    setSeenCount(0);
 
     void (async () => {
       try {
-        const questions = await fetchQuestionsByGameId(gameId);
+        const availableGames = await fetchGames();
+        if (cancelled) {
+          return;
+        }
+
+        const matchedGame = availableGames.find((candidate) => candidate.id === gameId);
+        if (!matchedGame) {
+          throw new Error("Game not found.");
+        }
+
+        setGame(matchedGame);
+
+        const questions = await fetchQuestionsByGame(matchedGame);
         if (cancelled) {
           return;
         }
@@ -205,6 +225,9 @@ export function GamePage() {
           loadError instanceof Error
             ? loadError.message
             : "Unable to load questions for this game.";
+        if (message === "Game not found.") {
+          setGame(null);
+        }
         setError(message);
         setIsLoading(false);
       }
@@ -213,7 +236,7 @@ export function GamePage() {
     return () => {
       cancelled = true;
     };
-  }, [gameId, game, markSeen, updateSeenCount]);
+  }, [gameId, markSeen, updateSeenCount]);
 
   useEffect(() => {
     if (!statusMessage) {
@@ -280,7 +303,10 @@ export function GamePage() {
     return Math.max(0, allQuestions.length - seenCount);
   }, [allQuestions.length, seenCount]);
 
-  if (!game) {
+  const activeColor = game?.color ?? "#FFD93D";
+  const activeGameName = game?.name ?? "Loading...";
+
+  if (!isLoading && !game) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
@@ -336,7 +362,7 @@ export function GamePage() {
           </Link>
 
           <div className="flex-1 text-center">
-            <div className="inline-block px-6 py-2 border-4 border-dashed mb-3" style={{ borderColor: game.color }}>
+            <div className="inline-block px-6 py-2 border-4 border-dashed mb-3" style={{ borderColor: activeColor }}>
               <p className="text-sm font-bold tracking-wider" style={{ fontFamily: "Courier New, monospace", color: "#fff" }}>
                 NOW PLAYING
               </p>
@@ -345,11 +371,11 @@ export function GamePage() {
               className="text-4xl md:text-5xl font-bold"
               style={{
                 fontFamily: "Courier New, monospace",
-                color: game.color,
+                color: activeColor,
                 textShadow: "4px 4px 0px #000",
               }}
             >
-              {game.name}
+              {activeGameName}
             </h1>
           </div>
 
@@ -358,7 +384,7 @@ export function GamePage() {
             disabled={isLoading || allQuestions.length === 0}
             className="flex items-center gap-2 px-6 py-3 border-4 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 hover:rotate-2"
             style={{
-              backgroundColor: game.color,
+              backgroundColor: activeColor,
               borderColor: "#000",
               fontFamily: "Courier New, monospace",
               fontWeight: "bold",
@@ -412,7 +438,7 @@ export function GamePage() {
 
             {visibleQuestions.length > 1 ? (
               <DraggableCardStack
-                key={`${game.id}-${stackVersion}`}
+                key={`${game?.id ?? gameId ?? "game"}-${stackVersion}`}
                 stackOffsetX={isMobile ? 78 : 130}
                 stackOffsetY={isMobile ? 72 : 120}
                 visibleCount={isMobile ? 3 : 4}
@@ -428,11 +454,11 @@ export function GamePage() {
                 onIndexChange={handleStackChange}
               >
                 {visibleQuestions.map((question) => (
-                  <QuestionCard key={question.id} question={question} color={game.color} />
+                  <QuestionCard key={question.id} question={question} color={activeColor} />
                 ))}
               </DraggableCardStack>
             ) : (
-              visibleQuestions[0] && <QuestionCard question={visibleQuestions[0]} color={game.color} />
+              visibleQuestions[0] && <QuestionCard question={visibleQuestions[0]} color={activeColor} />
             )}
           </div>
         )}
@@ -453,7 +479,7 @@ export function GamePage() {
           <div
             className="px-6 py-3 border-4 border-black font-bold text-lg"
             style={{
-              backgroundColor: game.color,
+              backgroundColor: activeColor,
               fontFamily: "Courier New, monospace",
               boxShadow: "6px 6px 0px #000",
             }}
@@ -464,7 +490,7 @@ export function GamePage() {
 
         {statusMessage && (
           <div className="mt-6 text-center">
-            <div className="inline-block px-8 py-4 border-4 border-dashed" style={{ borderColor: game.color }}>
+            <div className="inline-block px-8 py-4 border-4 border-dashed" style={{ borderColor: activeColor }}>
               <p className="text-lg font-bold" style={{ fontFamily: "Courier New, monospace", color: "#fff" }}>
                 {statusMessage}
               </p>
